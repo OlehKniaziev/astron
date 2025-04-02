@@ -92,7 +92,7 @@ HELIOS_INLINE void *HeliosRealloc(HeliosAllocator allocator, void *old_ptr, UZ o
 
 HeliosAllocator HeliosNewMallocAllocator(void);
 
-#ifdef HELIOS_IMPLEMENTATION
+#ifdef ASTRON_HELIOS_IMPLEMENTATION
 
     void *MallocStub(void *user, UZ size) {
         HELIOS_UNUSED(user);
