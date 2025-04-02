@@ -29,6 +29,11 @@
 
 #define HELIOS_UNUSED(x) (void)(x)
 
+#define HELIOS_TODO() do {                                      \
+        fprintf(stderr, "%s:%d: TODO", __FILE__, __LINE__);     \
+        abort();                                                \
+    } while (0)
+
 #ifdef _MSC_VER
 #    define HELIOS_INLINE __forceinline
 #else
