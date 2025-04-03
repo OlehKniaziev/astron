@@ -58,6 +58,11 @@ typedef int16_t S16;
 typedef int32_t S32;
 typedef int64_t S64;
 
+typedef S8  B8;
+typedef S16 B16;
+typedef S32 B32;
+typedef S64 B64;
+
 #if defined(HELIOS_BITS_32)
     typedef uint32_t UZ;
     typedef int32_t  SZ;
