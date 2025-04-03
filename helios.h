@@ -63,6 +63,9 @@ typedef S16 B16;
 typedef S32 B32;
 typedef S64 B64;
 
+typedef float  F32;
+typedef double F64;
+
 #if defined(HELIOS_BITS_32)
     typedef uint32_t UZ;
     typedef int32_t  SZ;
@@ -72,8 +75,8 @@ typedef S64 B64;
 #endif // bit size check
 
 typedef struct HeliosAllocatorVTable {
-    void *(*alloc)(void*, UZ);        // required
-    void  (*free)(void*, void*, UZ);    // required
+    void *(*alloc)(void*, UZ);              // required
+    void  (*free)(void*, void*, UZ);        // required
     void *(*realloc)(void*, void*, UZ, UZ); // optional
 } HeliosAllocatorVTable;
 
@@ -81,6 +84,37 @@ typedef struct HeliosAllocator {
     HeliosAllocatorVTable vtable;
     void *data;
 } HeliosAllocator;
+
+typedef struct HeliosString8 {
+    U8 *data;
+    UZ count;
+    UZ capacity;
+    HeliosAllocator allocator;
+} HeliosString8;
+
+typedef U32 HeliosChar;
+
+B32 HeliosCharIsNum(HeliosChar c);
+B32 HeliosCharIsAlpha(HeliosChar c);
+
+HELIOS_INLINE B32 HeliosCharIsAlnum(HeliosChar c) {
+    return HeliosCharIsNum(c) || HeliosCharIsAlpha(c);
+}
+
+HeliosString8 HeliosString8FromCStr(HeliosAllocator, const char *);
+B32 HeliosString8FromCStrChecked(HeliosAllocator, const char *, HeliosString8 *);
+
+typedef struct HeliosString8Stream {
+    const U8 *data;
+    UZ count;
+    UZ byte_offset;
+    UZ char_offset;
+} HeliosString8Stream;
+
+HeliosString8Stream HeliosString8StreamInit(HeliosString8Stream *, const U8 *, UZ);
+B32 HeliosString8StreamCur(HeliosString8Stream *, HeliosChar *);
+B32 HeliosString8StreamNext(HeliosString8Stream *, HeliosChar *);
+void HeliosString8StreamPrev(HeliosString8Stream *, HeliosChar *);
 
 HELIOS_INLINE void *HeliosAlloc(HeliosAllocator allocator, UZ size) {
     return allocator.vtable.alloc(allocator.data, size);
@@ -104,33 +138,68 @@ HeliosAllocator HeliosNewMallocAllocator(void);
 
 #ifdef ASTRON_HELIOS_IMPLEMENTATION
 
-    void *MallocStub(void *user, UZ size) {
-        HELIOS_UNUSED(user);
-        return malloc(size);
+void *MallocStub(void *user, UZ size) {
+    HELIOS_UNUSED(user);
+    return malloc(size);
+}
+
+void FreeStub(void *user, void *ptr, UZ size) {
+    HELIOS_UNUSED(user);
+    HELIOS_UNUSED(size);
+    free(ptr);
+}
+
+void *ReallocStub(void *user, void *ptr, UZ old_size, UZ new_size) {
+    HELIOS_UNUSED(user);
+    HELIOS_UNUSED(old_size);
+    return realloc(ptr, new_size);
+}
+
+HeliosAllocator HeliosNewMallocAllocator(void) {
+    return (HeliosAllocator) {
+        .vtable = (HeliosAllocatorVTable) {
+            .alloc = MallocStub,
+            .free = FreeStub,
+            .realloc = ReallocStub,
+        },
+        .data = NULL,
+    };
+}
+
+#define HELIOS_UTF8_MASK2 ((HeliosChar)0xC0 << 24)
+#define HELIOS_UTF8_MASK3 ((HeliosChar)0xE0 << 24)
+#define HELIOS_UTF8_MASK4 ((HeliosChar)0xF0 << 24)
+
+// TODO: add more validations
+B32 HeliosString8StreamNext(HeliosString8Stream *stream, HeliosChar *c) {
+    if (stream->byte_offset >= stream->count) return 0;
+
+    ++stream->char_offset;
+
+    U32 bytes = *(const U32 *)(stream->data + stream->byte_offset);
+
+    if ((bytes & HELIOS_UTF8_MASK2) == HELIOS_UTF8_MASK2) {
+        if (c != NULL) *c = ((bytes & (0x0F << 24)) >> 18) | ((bytes & (0x3F << 16)) >> 16);
+        stream->byte_offset += 2;
+        return 1;
     }
 
-    void FreeStub(void *user, void *ptr, UZ size) {
-        HELIOS_UNUSED(user);
-        HELIOS_UNUSED(size);
-        free(ptr);
+    if ((bytes & HELIOS_UTF8_MASK3) == HELIOS_UTF8_MASK3) {
+        if (c != NULL) *c = ((bytes & (0x0F << 24)) >> 12) | ((bytes & (0x3F << 16)) >> 10) | ((bytes & (0x3F << 8)) >> 8);
+        stream->byte_offset += 3;
+        return 1;
     }
 
-    void *ReallocStub(void *user, void *ptr, UZ old_size, UZ new_size) {
-        HELIOS_UNUSED(user);
-        HELIOS_UNUSED(old_size);
-        return realloc(ptr, new_size);
+    if ((bytes & HELIOS_UTF8_MASK4) == HELIOS_UTF8_MASK4) {
+        if (c != NULL) *c = ((bytes & (0x07 << 24)) >> 6) | ((bytes & (0x3F << 16)) >> 4) | ((bytes & (0x3F << 8)) >> 2) | (bytes & 0x3F);
+        stream->byte_offset += 4;
+        return 1;
     }
 
-    HeliosAllocator HeliosNewMallocAllocator(void) {
-        return (HeliosAllocator) {
-            .vtable = (HeliosAllocatorVTable) {
-                .alloc = MallocStub,
-                .free = FreeStub,
-                .realloc = ReallocStub,
-            },
-            .data = NULL,
-        };
-    }
+    if (c != NULL) *c = bytes >> 24;
+    ++stream->byte_offset;
+    return 1;
+}
 
 #endif // HELIOS_IMPLEMENTATION
 #endif // HELIOS_H
