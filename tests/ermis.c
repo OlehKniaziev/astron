@@ -2,10 +2,10 @@
 #include "../helios.h"
 #include "../ermis.h"
 
-ERMIS_DECL_ARRAY(S32, IntArray);
-ERMIS_IMPL_ARRAY(S32, IntArray);
+ERMIS_DECL_ARRAY(S32, IntArray)
+ERMIS_IMPL_ARRAY(S32, IntArray)
 
-int main() {
+int main(void) {
     UZ ints_count = 10;
 
     HeliosAllocator malloc_allocator = HeliosNewMallocAllocator();
@@ -21,7 +21,7 @@ int main() {
     HELIOS_VERIFY(ints.count == ints.capacity);
 
     for (UZ i = 0; i < ints_count; ++i) {
-        HELIOS_VERIFY(IntArrayAt(&ints, i) == i);
+        HELIOS_VERIFY(IntArrayAt(&ints, i) == (S32)i);
     }
 
     return 0;
