@@ -40,6 +40,8 @@
 #    define HELIOS_INLINE __attribute__((always_inline)) inline
 #endif // compiler check
 
+#define HELIOS_INTERNAL static
+
 #if SIZE_MAX == UINT32_MAX
 #    define HELIOS_BITS_32
 #elif SIZE_MAX == UINT64_MAX
@@ -92,13 +94,23 @@ typedef struct HeliosString8 {
     HeliosAllocator allocator;
 } HeliosString8;
 
+typedef struct HeliosStringView {
+    const U8 *data;
+    UZ count;
+} HeliosStringView;
+
 typedef U32 HeliosChar;
 
-B32 HeliosCharIsNum(HeliosChar c);
-B32 HeliosCharIsAlpha(HeliosChar c);
+HELIOS_INLINE B32 HeliosCharIsDigit(HeliosChar c) {
+    return c >= '0' && c <= '9';
+}
+
+HELIOS_INLINE B32 HeliosCharIsAlpha(HeliosChar c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
 
 HELIOS_INLINE B32 HeliosCharIsAlnum(HeliosChar c) {
-    return HeliosCharIsNum(c) || HeliosCharIsAlpha(c);
+    return HeliosCharIsDigit(c) || HeliosCharIsAlpha(c);
 }
 
 HeliosString8 HeliosString8FromCStr(HeliosAllocator, const char *);
@@ -111,7 +123,7 @@ typedef struct HeliosString8Stream {
     UZ char_offset;
 } HeliosString8Stream;
 
-HeliosString8Stream HeliosString8StreamInit(HeliosString8Stream *, const U8 *, UZ);
+void HeliosString8StreamInit(HeliosString8Stream *, const U8 *, UZ);
 B32 HeliosString8StreamCur(HeliosString8Stream *, HeliosChar *);
 B32 HeliosString8StreamNext(HeliosString8Stream *, HeliosChar *);
 void HeliosString8StreamPrev(HeliosString8Stream *, HeliosChar *);
@@ -164,6 +176,13 @@ HeliosAllocator HeliosNewMallocAllocator(void) {
         },
         .data = NULL,
     };
+}
+
+void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ count) {
+    stream->data = data;
+    stream->byte_offset = (UZ)-1;
+    stream->char_offset = (UZ)-1;
+    stream->count = count;
 }
 
 #define HELIOS_UTF8_MASK2 ((HeliosChar)0xC0 << 24)
