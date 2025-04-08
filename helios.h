@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <malloc.h>
 #include <string.h>
+#include <ctype.h>
 
 #ifndef HELIOS_STRIP_ASSERTS
 #    define HELIOS_ASSERT(cond) do {                                        \
@@ -39,6 +40,12 @@
 #else
 #    define HELIOS_INLINE __attribute__((always_inline)) inline
 #endif // compiler check
+
+#ifdef _WIN32
+#define HELIOS_PAGE_ALIGNMENT (1024 * 64)
+#else
+#define HELIOS_PAGE_ALIGNMENT (1024 * 4)
+#endif // _WIN32
 
 #define HELIOS_INTERNAL static
 
@@ -87,6 +94,18 @@ typedef struct HeliosAllocator {
     void *data;
 } HeliosAllocator;
 
+void *HeliosRawAlloc(UZ);
+
+HELIOS_INLINE UZ HeliosRoundUp(UZ size, UZ align) {
+    return size + ((align - (size & (align - 1))) & (align - 1));
+}
+
+HELIOS_INLINE UZ HeliosRoundDown(UZ size, UZ align) {
+    return size - (size & (align - 1));
+}
+
+extern HeliosAllocator helios_temp_allocator;
+
 typedef struct HeliosString8 {
     U8 *data;
     UZ count;
@@ -98,6 +117,9 @@ typedef struct HeliosStringView {
     const U8 *data;
     UZ count;
 } HeliosStringView;
+
+B32 HeliosParseS64(HeliosStringView, S64 *);
+B32 HeliosParseF64(HeliosStringView, F64 *);
 
 typedef U32 HeliosChar;
 
@@ -148,23 +170,81 @@ HELIOS_INLINE void *HeliosRealloc(HeliosAllocator allocator, void *old_ptr, UZ o
 
 HeliosAllocator HeliosNewMallocAllocator(void);
 
+HELIOS_INLINE HeliosString8 HeliosString8FromStringView(HeliosAllocator allocator, HeliosStringView sv) {
+    UZ s_count = sv.count;
+
+    U8 *s_data = (U8 *)HeliosAlloc(allocator, s_count);
+    memcpy(s_data, sv.data, s_count);
+    s_data[s_count] = '\0';
+
+    return (HeliosString8) {
+        .data = s_data,
+        .count = s_count,
+        .capacity = s_count,
+        .allocator = allocator,
+    };
+}
+
 #ifdef ASTRON_HELIOS_IMPLEMENTATION
 
-void *MallocStub(void *user, UZ size) {
+B32 HeliosParseS64(HeliosStringView source, S64 *out) {
+    if (source.count == 0) return 0;
+
+    S64 result = 0;
+    UZ coef = 1;
+
+    for (UZ i = source.count - 1; i > 0; --i) {
+        U8 c = source.data[i];
+        if (!isdigit(c)) return 0;
+
+        U8 digit = c - '0';
+        result += digit * coef;
+        coef *= 10;
+    }
+
+    if (isdigit(source.data[0])) result += (source.data[0] - '0') * coef;
+    else if (source.data[0] == '-') result = -result;
+    else return 0;
+
+    *out = result;
+
+    return 0;
+}
+
+// FIXME: This should NOT allocate anything, even on the temp allocator.
+// Skill issue.
+B32 HeliosParseF64(HeliosStringView source, F64 *out) {
+    UZ temp_count = source.count + 1;
+    char *temp = (char *)HeliosAlloc(helios_temp_allocator, temp_count);
+    memcpy(temp, (const void *)source.data, source.count);
+    temp[temp_count] = '\0';
+
+    char *d_out;
+    *out = strtod(temp, &d_out);
+    return temp != d_out;
+}
+
+HELIOS_INTERNAL void *MallocStub(void *user, UZ size) {
     HELIOS_UNUSED(user);
     return malloc(size);
 }
 
-void FreeStub(void *user, void *ptr, UZ size) {
+HELIOS_INTERNAL void FreeStub(void *user, void *ptr, UZ size) {
     HELIOS_UNUSED(user);
     HELIOS_UNUSED(size);
     free(ptr);
 }
 
-void *ReallocStub(void *user, void *ptr, UZ old_size, UZ new_size) {
+HELIOS_INTERNAL void *ReallocStub(void *user, void *ptr, UZ old_size, UZ new_size) {
     HELIOS_UNUSED(user);
     HELIOS_UNUSED(old_size);
     return realloc(ptr, new_size);
+}
+
+HELIOS_INTERNAL void _HeliosNopFreeStub(void *user, void *ptr, UZ size) {
+    HELIOS_UNUSED(user);
+    HELIOS_UNUSED(ptr);
+    HELIOS_UNUSED(size);
 }
 
 HeliosAllocator HeliosNewMallocAllocator(void) {
@@ -175,6 +255,44 @@ HeliosAllocator HeliosNewMallocAllocator(void) {
             .realloc = ReallocStub,
         },
         .data = NULL,
+    };
+}
+
+typedef struct HeliosDynamicCircleBufferAllocator {
+    void *buffer;
+    UZ capacity;
+    UZ offset;
+} HeliosDynamicCircleBufferAllocator;
+
+HELIOS_INTERNAL void *_HeliosDynamicCircleBufferAllocatorAlloc(void *a_ptr, UZ size) {
+    HeliosDynamicCircleBufferAllocator *allocator = (HeliosDynamicCircleBufferAllocator *)a_ptr;
+    if (allocator->buffer == NULL) {
+        HELIOS_ASSERT(allocator->capacity % 2 == 0);
+        allocator->buffer = HeliosRawAlloc(allocator->capacity);
+    }
+
+    size = HeliosRoundUp(size, sizeof(UZ));
+    if (allocator->offset + size >= allocator->capacity) allocator->offset = 0;
+
+    void *ptr = (void *)((U8 *)allocator->buffer + allocator->offset);
+    allocator->offset += size;
+    return ptr;
+}
+
+HeliosAllocator HeliosNewDynamicCircleBufferAllocator(HeliosDynamicCircleBufferAllocator *allocator, UZ capacity) {
+    capacity = HeliosRoundUp(capacity, HELIOS_PAGE_ALIGNMENT);
+
+    allocator->buffer = NULL;
+    allocator->capacity = capacity;
+    allocator->offset = 0;
+
+    return (HeliosAllocator) {
+        .data = (void *)allocator,
+        .vtable = (HeliosAllocatorVTable) {
+            .alloc = _HeliosDynamicCircleBufferAllocatorAlloc,
+            .free = _HeliosNopFreeStub,
+            .realloc = NULL,
+        },
     };
 }
 
