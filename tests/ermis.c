@@ -49,7 +49,8 @@ void test_hashmap(void) {
     HELIOS_VERIFY(map.count == 351);
 }
 
-int main() {
+int main(void) {
     test_array();
     test_hashmap();
+    return 0;
 }
