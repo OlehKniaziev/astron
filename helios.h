@@ -150,6 +150,17 @@ typedef struct HeliosStringView {
     UZ count;
 } HeliosStringView;
 
+HELIOS_INLINE B32 HeliosStringViewEqualCStr(HeliosStringView sv, const char *cstr) {
+    UZ cstr_len = strlen(cstr);
+    if (cstr_len != sv.count) return 0;
+
+    for (UZ i = 0; i < sv.count; ++i) {
+        if (sv.data[i] != (U8)cstr[i]) return 0;
+    }
+
+    return 1;
+}
+
 HELIOS_INLINE HeliosStringView HeliosString8View(HeliosString8 s) {
     return (HeliosStringView) {
         .data = s.data,

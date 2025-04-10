@@ -340,6 +340,27 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8St
         };
         return 1;
     }
+    case GeTomlTokenType_Identifier: {
+        if (HeliosStringViewEqualCStr(cur_token.value, "true")) {
+            *out = (GeTomlValue) {
+                .type = GeTomlValueType_Bool,
+                .b = 1,
+            };
+            return 1;
+        }
+
+        if (HeliosStringViewEqualCStr(cur_token.value, "false")) {
+            *out = (GeTomlValue) {
+                .type = GeTomlValueType_Bool,
+                .b = 0,
+            };
+            return 1;
+        }
+
+        GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
+        snprintf(err_buf, err_buf_count, "%d:%d: unexpected identifier", err_location.line, err_location.column);
+        return 0;
+    }
     case GeTomlTokenType_Float: {
         F64 f;
         HELIOS_ASSERT(HeliosParseF64(cur_token.value, &f));
