@@ -87,8 +87,8 @@
 #define ERMIS_HASHMAP_FOREACH(hashmap, keyname, valuename, body)        \
     for (UZ _idx = 0; _idx < (hashmap)->capacity; ++_idx) {             \
         if (((hashmap)->meta[_idx] & ERMIS_HASH_OCCUPIED) == 0) continue; \
-        typeof((hashmap)->keys[0]) keyname = (hashmap)->keys[_idx];     \
-        typeof((hashmap)->values[0]) valuename = (hashmap)->values[_idx]; \
+        __typeof__((hashmap)->keys[0]) keyname = (hashmap)->keys[_idx];     \
+        __typeof__((hashmap)->values[0]) valuename = (hashmap)->values[_idx]; \
         body;                                                           \
     }
 
@@ -118,7 +118,7 @@
                                                                         \
         U64 idx = hashfunc(key) % map->capacity;                        \
                                                                         \
-        while (1) {                                                     \
+        do {                                                            \
             if ((map->meta[idx] & ERMIS_HASH_OCCUPIED) == 0) {          \
                 map->keys[idx] = key;                                   \
                 map->values[idx] = value;                               \
@@ -134,7 +134,8 @@
             }                                                           \
                                                                         \
             ++idx;                                                      \
-        }                                                               \
+            if (idx > map->capacity) idx = 0;                           \
+        } while (1);                                                    \
     }                                                                   \
                                                                         \
     B32 hashmapname##Find(hashmapname *map, K key, V *value) {          \
