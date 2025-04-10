@@ -146,6 +146,21 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
         token->value = (HeliosStringView) { .data = s->data + s->byte_offset, .count = 1 };
         return 1;
     }
+    case '"': {
+        UZ start = s->byte_offset + 1;
+        while (HeliosString8StreamNext(s, &cur_char)) {
+            if (cur_char == '"') break;
+        }
+        UZ end = s->byte_offset;
+
+        HELIOS_ASSERT(s->byte_offset < s->count);
+
+        token->type = GeTomlTokenType_String;
+        token->value = (HeliosStringView) { .data = s->data + start, .count = end - start };
+
+        return 1;
+    }
+    case '\'': HELIOS_PANIC("Literal strings aren't supported yet");
     case '\r': {
         if (!HeliosString8StreamNext(s, &cur_char)) {
             token->type = GeTomlTokenType_Illegal;
@@ -211,7 +226,7 @@ HELIOS_INTERNAL B32 _GeTomlPeekToken(HeliosString8Stream *s, GeTomlToken *token)
     return 1;
 }
 
-HELIOS_INTERNAL void _GeTomlAdvanceTokens(HeliosString8Stream *s) {
+HELIOS_INTERNAL HELIOS_INLINE void _GeTomlAdvanceTokens(HeliosString8Stream *s) {
     GeTomlToken tok;
     _GeTomlNextToken(s, &tok);
 }

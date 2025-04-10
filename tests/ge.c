@@ -5,7 +5,7 @@
 
 int main(void) {
     HeliosAllocator allocator = HeliosNewMallocAllocator();
-    const char *buf = "[hello]\nworld = 1";
+    const char *buf = "[hello]\nworld = \"1\"";
     UZ buf_count = strlen(buf);
     char err_buf[512];
     UZ err_buf_count = sizeof(err_buf);

@@ -12,7 +12,7 @@
 #ifndef HELIOS_STRIP_ASSERTS
 #    define HELIOS_ASSERT(cond) do {                                        \
             if (!(cond)) {                                                  \
-                fprintf(stderr, "%s:%d: ASSERTION FAILED: %s", __FILE__, __LINE__, #cond); \
+                fprintf(stderr, "%s:%d: ASSERTION FAILED: %s\n", __FILE__, __LINE__, #cond); \
                 abort();                                                    \
             }                                                               \
         } while (0)
@@ -23,7 +23,7 @@
 
 #define HELIOS_VERIFY(cond) do {                                        \
         if (!(cond)) {                                                  \
-            fprintf(stderr, "%s:%d: VERIFICATION FAILED: %s", __FILE__, __LINE__, #cond); \
+            fprintf(stderr, "%s:%d: VERIFICATION FAILED: %s\n", __FILE__, __LINE__, #cond); \
             abort();                                                    \
         }                                                               \
     } while (0)
@@ -31,7 +31,12 @@
 #define HELIOS_UNUSED(x) (void)(x)
 
 #define HELIOS_TODO() do {                                      \
-        fprintf(stderr, "%s:%d: TODO", __FILE__, __LINE__);     \
+        fprintf(stderr, "%s:%d: TODO\n", __FILE__, __LINE__);     \
+        abort();                                                \
+    } while (0)
+
+#define HELIOS_PANIC(msg) do {                                      \
+        fprintf(stderr, "%s:%d: PROGRAM PANICKED: %s\n", __FILE__, __LINE__, msg);     \
         abort();                                                \
     } while (0)
 
