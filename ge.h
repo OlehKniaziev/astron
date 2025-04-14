@@ -726,7 +726,8 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
         }
         case GeTomlTokenType_Newline: break;
         default: {
-            HELIOS_VERIFY(cur_token.type == GeTomlTokenType_Identifier);
+            if (cur_token.type != GeTomlTokenType_Identifier) OK_GE_BAIL_ON_TOKEN(ctx, cur_token, "expected an identifier");
+
             HeliosString8 key = HeliosString8FromSV(ctx.allocator, cur_token.value);
 
             GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, cur_token);
