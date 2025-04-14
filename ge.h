@@ -1,6 +1,5 @@
 // TODOs:
 // toml:
-//   create a basic context structure to not pass 10 arguments to each procedure
 //   add spec conformance tests
 //   implement error location procedures
 
@@ -93,6 +92,13 @@ HELIOS_INTERNAL GeSourceLocation _GeSourceLocationFromTokenData(HeliosString8Str
 }
 
 #ifdef ASTRON_GE_USE_TOML
+
+typedef struct GeTomlParsingContext {
+    HeliosString8Stream stream;
+    char *err_buf;
+    UZ err_buf_count;
+    HeliosAllocator allocator;
+} GeTomlParsingContext;
 
 GeTomlValue *GeTomlTableFind(GeTomlTable *table, HeliosStringView key) {
     HELIOS_VERIFY(table != NULL);
@@ -249,6 +255,42 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
     }
 }
 
+#define GE_TOML_BAIL_ON_STREAM(ctx, msg) do {                           \
+        GeSourceLocation source_location = _GeSourceLocationFromStream(&(ctx).stream); \
+        snprintf((ctx).err_buf, (ctx).err_buf_count, "%d:%d: " msg, source_location.line, source_location.column); \
+        return 0;                                                       \
+    } while (0)
+
+#define GE_TOML_BAIL_ON_STREAM_FMT(ctx, fmt, ...)  do {                 \
+        GeSourceLocation source_location = _GeSourceLocationFromStream(&(ctx).stream); \
+        snprintf((ctx).err_buf, (ctx).err_buf_count, "%d:%d: " fmt, source_location.line, source_location.column, __VA_ARGS__); \
+        return 0;                                                       \
+    } while (0)
+
+#define GE_TOML_BAIL_ON_TOKEN(ctx, token, msg) do {                     \
+        GeSourceLocation source_location = _GeSourceLocationFromTokenData(&(ctx).stream, (token).value); \
+        snprintf((ctx).err_buf, (ctx).err_buf_count, "%d:%d: " msg, source_location.line, source_location.column); \
+        return 0;                                                       \
+    } while (0)
+
+#define GE_TOML_BAIL_ON_TOKEN_FMT(ctx, token, fmt, ...)  do {           \
+        GeSourceLocation source_location = _GeSourceLocationFromToken((token)); \
+        snprintf((ctx).err_buf, (ctx).err_buf_count, "%d:%d: " fmt, source_location.line, source_location.column, __VA_ARGS__); \
+        return 0;                                                       \
+    } while (0)
+
+#define GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, token) do {             \
+        if (!_GeTomlNextToken(&(ctx).stream, &(token))) {       \
+            GE_TOML_BAIL_ON_STREAM((ctx), "unexpected EOF");    \
+        }                                                       \
+    } while (0)
+
+#define GE_TOML_PEEK_TOKEN_OR_BAIL(ctx, token) do {             \
+        if (!_GeTomlPeekToken(&(ctx).stream, &(token))) {        \
+            GE_TOML_BAIL_ON_STREAM((ctx), "unexpected EOF");    \
+        }                                                       \
+    } while (0)
+
 HELIOS_INTERNAL B32 _GeTomlPeekToken(HeliosString8Stream *s, GeTomlToken *token) {
     UZ byte_offset = s->byte_offset;
     UZ char_offset = s->char_offset;
@@ -340,38 +382,28 @@ HELIOS_INTERNAL void GeTomlKeyPush(GeTomlKey *key, HeliosStringView part) {
 #endif // ASTRON_ERMIS_H
 
 // TODO: support quoted keys
-HELIOS_INTERNAL B32 _GeTomlParseKey(HeliosAllocator allocator,
-                                    HeliosString8Stream *input_stream,
-                                    char *err_buf,
-                                    UZ err_buf_count,
-                                    GeTomlKey *out_key) {
+HELIOS_INTERNAL B32 _GeTomlParseKey(GeTomlParsingContext *ctx, GeTomlKey *out_key) {
     GeTomlToken cur_token;
 
-    GeTomlKeyInit(allocator, out_key, 4);
+    GeTomlKeyInit(ctx->allocator, out_key, 4);
 
     do {
-        if (!_GeTomlNextToken(input_stream, &cur_token)) {
-            GeSourceLocation source_location = _GeSourceLocationFromStream(input_stream);
-            snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", source_location.line, source_location.column);
-            return 0;
-        }
+        GE_TOML_NEXT_TOKEN_OR_BAIL(*ctx, cur_token);
 
         if (cur_token.type != GeTomlTokenType_Identifier) {
-            GeSourceLocation source_location = _GeSourceLocationFromTokenData(input_stream, cur_token.value);
-            snprintf(err_buf, err_buf_count, "%d:%d: expected an identifier", source_location.line, source_location.column);
-            return 0;
+            GE_TOML_BAIL_ON_TOKEN(*ctx, cur_token, "expected an identifier");
         }
 
         UZ key_part_count = cur_token.value.count;
-        U8 *key_part_data = (U8 *)HeliosAlloc(allocator, key_part_count);
+        U8 *key_part_data = (U8 *)HeliosAlloc(ctx->allocator, key_part_count);
         memcpy(key_part_data, cur_token.value.data, key_part_count);
 
         HeliosStringView key_part = { .count = key_part_count, .data = key_part_data };
 
         GeTomlKeyPush(out_key, key_part);
 
-        if (!_GeTomlPeekToken(input_stream, &cur_token) || cur_token.type != GeTomlTokenType_Dot) break;
-        _GeTomlAdvanceTokens(input_stream);
+        if (!_GeTomlPeekToken(&ctx->stream, &cur_token) || cur_token.type != GeTomlTokenType_Dot) break;
+        _GeTomlAdvanceTokens(&ctx->stream);
     } while (1);
 
     return 1;
@@ -394,13 +426,10 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsert(HeliosAllocator allocator, GeTom
     return &table->next->value;
 }
 
-HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(HeliosAllocator allocator,
+HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(GeTomlParsingContext *ctx,
                                                    GeTomlTable *table,
                                                    GeTomlKey key,
-                                                   GeTomlValue value,
-                                                   HeliosString8Stream *input_stream,
-                                                   char *err_buf,
-                                                   UZ err_buf_count) {
+                                                   GeTomlValue value) {
     HELIOS_ASSERT(key.count > 0);
 
     HeliosStringView leaf_key = key.items[key.count - 1];
@@ -414,24 +443,17 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(HeliosAllocator allocator,
         GeTomlValue *existing_subtable_value = GeTomlTableFind(cur_table, subtable_name);
         if (existing_subtable_value) {
             if (existing_subtable_value->type != GeTomlValueType_Table) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(input_stream);
-                snprintf(err_buf,
-                         err_buf_count,
-                         "%d:%d: expected key '" HELIOS_SV_FMT "' to refer to a table",
-                         err_location.line,
-                         err_location.column,
-                         HELIOS_SV_ARG(subtable_name));
-                return NULL;
+                GE_TOML_BAIL_ON_STREAM_FMT(*ctx, "expected key '" HELIOS_SV_FMT "' to refer to a table", HELIOS_SV_ARG(subtable_name));
             }
 
             subtable = existing_subtable_value->t;
         } else {
-            subtable = (GeTomlTable *)HeliosAlloc(allocator, sizeof(GeTomlTable));
+            subtable = (GeTomlTable *)HeliosAlloc(ctx->allocator, sizeof(GeTomlTable));
             GeTomlValue subtable_value = {
                 .type = GeTomlValueType_Table,
                 .t = subtable,
             };
-            _GeTomlTableInsert(allocator, cur_table, subtable_name, subtable_value);
+            _GeTomlTableInsert(ctx->allocator, cur_table, subtable_name, subtable_value);
         }
 
         cur_table = subtable;
@@ -439,32 +461,21 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(HeliosAllocator allocator,
 
     GeTomlValue *existing_value_for_key = GeTomlTableFind(cur_table, leaf_key);
     if (existing_value_for_key != NULL) {
-        GeSourceLocation err_location = _GeSourceLocationFromStream(input_stream);
-        snprintf(err_buf,
-                 err_buf_count,
-                 "%d:%d: cannot redefine key '" HELIOS_SV_FMT "'",
-                 err_location.line,
-                 err_location.column,
-                 HELIOS_SV_ARG(leaf_key));
-        return NULL;
+        GE_TOML_BAIL_ON_STREAM_FMT(*ctx, "cannot redefine key '" HELIOS_SV_FMT "'", HELIOS_SV_ARG(leaf_key));
     }
 
-    return _GeTomlTableInsert(allocator, cur_table, leaf_key, value);
+    return _GeTomlTableInsert(ctx->allocator, cur_table, leaf_key, value);
 }
 
-HELIOS_INTERNAL B32 _GeTomlParseKeyValue(HeliosAllocator allocator, HeliosString8Stream *stream, GeTomlKey *key, GeTomlValue *value, char *err_buf, UZ err_buf_count);
+HELIOS_INTERNAL B32 _GeTomlParseKeyValue(GeTomlParsingContext *ctx, GeTomlKey *key, GeTomlValue *value);
 
-HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8Stream *stream, GeTomlValue *out, char *err_buf, UZ err_buf_count) {
+HELIOS_INTERNAL B32 _GeTomlParseValue(GeTomlParsingContext *ctx, GeTomlValue *out) {
     GeTomlToken cur_token;
-    if (!_GeTomlNextToken(stream, &cur_token)) {
-        GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-        snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-        return 0;
-    }
+    GE_TOML_NEXT_TOKEN_OR_BAIL(*ctx, cur_token);
 
     switch (cur_token.type) {
     case GeTomlTokenType_String: {
-        HeliosString8 s = HeliosString8FromStringView(allocator, cur_token.value);
+        HeliosString8 s = HeliosString8FromStringView(ctx->allocator, cur_token.value);
         *out = (GeTomlValue) {
             .type = GeTomlValueType_String,
             .s = s,
@@ -498,9 +509,7 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8St
             return 1;
         }
 
-        GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-        snprintf(err_buf, err_buf_count, "%d:%d: unexpected identifier", err_location.line, err_location.column);
-        return 0;
+        GE_TOML_BAIL_ON_STREAM(*ctx, "unexpected identifier");
     }
     case GeTomlTokenType_Float: {
         F64 f;
@@ -514,32 +523,24 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8St
     }
     case GeTomlTokenType_LeftBracket: {
         GeTomlArray array;
-        GeTomlArrayInit(&array, allocator, 15);
+        GeTomlArrayInit(&array, ctx->allocator, 15);
 
         while (1) {
-            if (!_GeTomlPeekToken(stream, &cur_token)) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-                return 0;
-            }
+            GE_TOML_PEEK_TOKEN_OR_BAIL(*ctx, cur_token);
 
             if (cur_token.type == GeTomlTokenType_RightBracket) {
-                _GeTomlAdvanceTokens(stream);
+                _GeTomlAdvanceTokens(&ctx->stream);
                 break;
             }
 
             GeTomlValue arr_elem;
-            if (!_GeTomlParseValue(allocator, stream, &arr_elem, err_buf, err_buf_count)) return 0;
+            if (!_GeTomlParseValue(ctx, &arr_elem)) return 0;
             GeTomlArrayPush(&array, arr_elem);
 
-            if (!_GeTomlPeekToken(stream, &cur_token)) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-                return 0;
-            }
+            GE_TOML_PEEK_TOKEN_OR_BAIL(*ctx, cur_token);
 
             if (cur_token.type == GeTomlTokenType_Comma) {
-                _GeTomlAdvanceTokens(stream);
+                _GeTomlAdvanceTokens(&ctx->stream);
             }
         }
 
@@ -550,49 +551,36 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8St
         return 1;
     }
     case GeTomlTokenType_LeftBrace: {
-        GeTomlTable *table = (GeTomlTable *)HeliosAlloc(allocator, sizeof(GeTomlTable));
+        GeTomlTable *table = (GeTomlTable *)HeliosAlloc(ctx->allocator, sizeof(GeTomlTable));
 
         while (1) {
             if (cur_token.type == GeTomlTokenType_RightBrace) {
-                _GeTomlAdvanceTokens(stream);
+                _GeTomlAdvanceTokens(&ctx->stream);
                 break;
             }
 
             GeTomlKey key;
             GeTomlValue value;
-            if (!_GeTomlParseKeyValue(allocator, stream, &key, &value, err_buf, err_buf_count)) return 0;
+            if (!_GeTomlParseKeyValue(ctx, &key, &value)) return 0;
 
-            if (_GeTomlTableInsertKey(allocator,
+            if (_GeTomlTableInsertKey(ctx,
                                       table,
                                       key,
-                                      value,
-                                      stream,
-                                      err_buf,
-                                      err_buf_count) == NULL) return 0;
+                                      value) == NULL) return 0;
 
-            if (!_GeTomlPeekToken(stream, &cur_token)) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-                return 0;
-            }
+            GE_TOML_PEEK_TOKEN_OR_BAIL(*ctx, cur_token);
 
             if (cur_token.type == GeTomlTokenType_Comma) {
-                _GeTomlAdvanceTokens(stream);
+                _GeTomlAdvanceTokens(&ctx->stream);
             } else {
                 break;
             }
         }
 
-        if (!_GeTomlNextToken(stream, &cur_token)) {
-            GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-            snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-            return 0;
-        }
+        GE_TOML_NEXT_TOKEN_OR_BAIL(*ctx, cur_token);
 
         if (cur_token.type != GeTomlTokenType_RightBrace) {
-            GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-            snprintf(err_buf, err_buf_count, "%d:%d: expected '}'", err_location.line, err_location.column);
-            return 0;
+            GE_TOML_BAIL_ON_TOKEN(*ctx, cur_token, "expected '}'");
         }
 
         *out = (GeTomlValue) {
@@ -605,81 +593,66 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8St
     }
 }
 
-HELIOS_INTERNAL B32 _GeTomlParseKeyValue(HeliosAllocator allocator, HeliosString8Stream *stream, GeTomlKey *out_key, GeTomlValue *out_value, char *err_buf, UZ err_buf_count) {
-    if (!_GeTomlParseKey(allocator, stream, err_buf, err_buf_count, out_key)) return 0;
+HELIOS_INTERNAL B32 _GeTomlParseKeyValue(GeTomlParsingContext *ctx, GeTomlKey *out_key, GeTomlValue *out_value) {
+    if (!_GeTomlParseKey(ctx, out_key)) return 0;
 
     GeTomlToken cur_token;
 
-    if (!_GeTomlNextToken(stream, &cur_token)) {
-        GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-        snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-        return 0;
-    }
+    GE_TOML_NEXT_TOKEN_OR_BAIL(*ctx, cur_token);
 
     if (cur_token.type != GeTomlTokenType_Equals) {
-        GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
-        snprintf(err_buf, err_buf_count, "%d:%d: expected '='", err_location.line, err_location.column);
-        return 0;
+        GE_TOML_BAIL_ON_TOKEN(*ctx, cur_token, "expected '='");
     }
 
-    if (!_GeTomlParseValue(allocator, stream, out_value, err_buf, err_buf_count)) return 0;
+    if (!_GeTomlParseValue(ctx, out_value)) return 0;
 
     return 1;
 }
 
 GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
-                      const char *buf,
-                      UZ buf_count,
-                      char *err_buf,
-                      UZ err_buf_count) {
-    HeliosString8Stream input_stream;
-    HeliosString8StreamInit(&input_stream, (const U8 *)buf, buf_count);
+                               const char *buf,
+                               UZ buf_count,
+                               char *err_buf,
+                               UZ err_buf_count) {
+    GeTomlParsingContext ctx;
+    HeliosString8StreamInit(&ctx.stream, (const U8 *)buf, buf_count);
+    ctx.err_buf = err_buf;
+    ctx.err_buf_count = err_buf_count;
+    ctx.allocator = allocator;
 
-    GeTomlTable *root_table = (GeTomlTable *)HeliosAlloc(allocator, sizeof(GeTomlTable));
+    GeTomlTable *root_table = (GeTomlTable *)HeliosAlloc(ctx.allocator, sizeof(GeTomlTable));
 
     GeTomlTable *current_table = root_table;
 
     GeTomlToken cur_token;
-    while (_GeTomlNextToken(&input_stream, &cur_token)) {
+    while (_GeTomlNextToken(&ctx.stream, &cur_token)) {
         switch (cur_token.type) {
         case GeTomlTokenType_LeftBracket: {
             GeTomlKey child_table_key;
 
-            if (!_GeTomlParseKey(allocator, &input_stream, err_buf, err_buf_count, &child_table_key)) return NULL;
+            if (!_GeTomlParseKey(&ctx, &child_table_key)) return NULL;
 
-            if (!_GeTomlNextToken(&input_stream, &cur_token)) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(&input_stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-                return NULL;
-            }
+            GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, cur_token);
 
             if (cur_token.type != GeTomlTokenType_RightBracket) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(&input_stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: expected ']'", err_location.line, err_location.column);
-                return NULL;
+                GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected ']'");
             }
 
-            if (_GeTomlNextToken(&input_stream, &cur_token) && cur_token.type != GeTomlTokenType_Newline) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(&input_stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: expected a newline", err_location.line, err_location.column);
-                return NULL;
+            if (_GeTomlNextToken(&ctx.stream, &cur_token) && cur_token.type != GeTomlTokenType_Newline) {
+                GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected a newline");
             }
 
-            // TODO: Check if the table was already defined.
-            GeTomlTable *child_table = (GeTomlTable *)HeliosAlloc(allocator, sizeof(GeTomlTable));
+            GeTomlTable *child_table = (GeTomlTable *)HeliosAlloc(ctx.allocator, sizeof(GeTomlTable));
 
             GeTomlValue child_table_value = {
                 .type = GeTomlValueType_Table,
                 .t = child_table,
             };
 
-            GeTomlValue *child_table_value_in_table = _GeTomlTableInsertKey(allocator,
+            GeTomlValue *child_table_value_in_table = _GeTomlTableInsertKey(&ctx,
                                                                             root_table,
                                                                             child_table_key,
-                                                                            child_table_value,
-                                                                            &input_stream,
-                                                                            err_buf,
-                                                                            err_buf_count);
+                                                                            child_table_value);
             if (child_table_value_in_table == NULL) return NULL;
             HELIOS_ASSERT(child_table_value_in_table->type == GeTomlValueType_Table);
             current_table = child_table_value_in_table->t;
@@ -687,33 +660,24 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
         }
         default: {
             HELIOS_VERIFY(cur_token.type == GeTomlTokenType_Identifier);
-            HeliosString8 key = HeliosString8FromSV(allocator, cur_token.value);
+            HeliosString8 key = HeliosString8FromSV(ctx.allocator, cur_token.value);
 
-            if (!_GeTomlNextToken(&input_stream, &cur_token)) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(&input_stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: unexpected EOF", err_location.line, err_location.column);
-                return NULL;
-            }
+            GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, cur_token);
 
             if (cur_token.type != GeTomlTokenType_Equals) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(&input_stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: expected '='", err_location.line, err_location.column);
-                return NULL;
+                GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected '='");
             }
 
             GeTomlValue value;
-            if (!_GeTomlParseValue(allocator, &input_stream, &value, err_buf, err_buf_count)) return NULL;
+            if (!_GeTomlParseValue(&ctx, &value)) return NULL;
 
-            if (_GeTomlNextToken(&input_stream, &cur_token) && cur_token.type != GeTomlTokenType_Newline) {
-                GeSourceLocation err_location = _GeSourceLocationFromStream(&input_stream);
-                snprintf(err_buf, err_buf_count, "%d:%d: expected a newline", err_location.line, err_location.column);
-                return NULL;
+            if (_GeTomlNextToken(&ctx.stream, &cur_token) && cur_token.type != GeTomlTokenType_Newline) {
+                GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected a newline");
             }
 
             HeliosStringView key_view = HeliosString8View(key);
 
-            // TODO: Check if the key is already present.
-            _GeTomlTableInsert(allocator, current_table, key_view, value);
+            _GeTomlTableInsert(ctx.allocator, current_table, key_view, value);
             break;
         }
         }
