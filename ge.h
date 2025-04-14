@@ -553,7 +553,7 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(GeTomlParsingContext *ctx, GeTomlValue *ou
         HELIOS_ASSERT(HeliosParseS64(cur_token.value, &i));
 
         *out = (GeTomlValue) {
-            .type = GeTomlValueType_String,
+            .type = GeTomlValueType_Int,
             .i = i,
         };
         return 1;
@@ -582,7 +582,7 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(GeTomlParsingContext *ctx, GeTomlValue *ou
         HELIOS_ASSERT(HeliosParseF64(cur_token.value, &f));
 
         *out = (GeTomlValue) {
-            .type = GeTomlValueType_String,
+            .type = GeTomlValueType_Float,
             .f = f,
         };
         return 1;
