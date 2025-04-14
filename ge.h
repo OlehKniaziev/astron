@@ -74,7 +74,8 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
                                char *err_buf,
                                UZ err_buf_count);
 
-GeTomlValue *GeTomlTableFind(GeTomlTable *table, HeliosStringView key);
+GeTomlValue *GeTomlTableFind(GeTomlTable *table, const char *key);
+GeTomlValue *GeTomlTableFindSV(GeTomlTable *table, HeliosStringView sv);
 #endif // ASTRON_GE_USE_TOML
 
 #ifdef ASTRON_GE_IMPLEMENTATION
@@ -147,13 +148,19 @@ typedef struct GeTomlParsingContext {
     HeliosAllocator allocator;
 } GeTomlParsingContext;
 
-GeTomlValue *GeTomlTableFind(GeTomlTable *table, HeliosStringView key) {
+GeTomlValue *GeTomlTableFindSV(GeTomlTable *table, HeliosStringView key) {
     HELIOS_VERIFY(table != NULL);
     for (; table != NULL; table = table->next) {
         if (HeliosStringViewEqual(table->key, key)) return &table->value;
     }
 
     return NULL;
+}
+
+GeTomlValue *GeTomlTableFind(GeTomlTable *table, const char *key) {
+    UZ sv_count = strlen(key);
+    HeliosStringView sv = { .data = (const U8 *)key, .count = sv_count };
+    return GeTomlTableFindSV(table, sv);
 }
 
 typedef enum {
@@ -489,7 +496,7 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(GeTomlParsingContext *ctx,
         HeliosStringView subtable_name = key.items[i];
         GeTomlTable *subtable;
 
-        GeTomlValue *existing_subtable_value = GeTomlTableFind(cur_table, subtable_name);
+        GeTomlValue *existing_subtable_value = GeTomlTableFindSV(cur_table, subtable_name);
         if (existing_subtable_value) {
             if (existing_subtable_value->type != GeTomlValueType_Table) {
                 GE_TOML_BAIL_ON_STREAM_FMT(*ctx, "expected key '" HELIOS_SV_FMT "' to refer to a table", HELIOS_SV_ARG(subtable_name));
@@ -508,7 +515,7 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(GeTomlParsingContext *ctx,
         cur_table = subtable;
     }
 
-    GeTomlValue *existing_value_for_key = GeTomlTableFind(cur_table, leaf_key);
+    GeTomlValue *existing_value_for_key = GeTomlTableFindSV(cur_table, leaf_key);
     if (existing_value_for_key != NULL) {
         GE_TOML_BAIL_ON_STREAM_FMT(*ctx, "cannot redefine key '" HELIOS_SV_FMT "'", HELIOS_SV_ARG(leaf_key));
     }
