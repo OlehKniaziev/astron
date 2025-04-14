@@ -1,7 +1,6 @@
 // TODOs:
 // toml:
 //   add spec conformance tests
-//   implement error location procedures
 
 #ifndef ASTRON_GE_H
 #define ASTRON_GE_H
@@ -81,14 +80,62 @@ GeTomlValue *GeTomlTableFind(GeTomlTable *table, HeliosStringView key);
 #ifdef ASTRON_GE_IMPLEMENTATION
 
 HELIOS_INTERNAL GeSourceLocation _GeSourceLocationFromStream(HeliosString8Stream *stream) {
-    HELIOS_UNUSED(stream);
-    HELIOS_TODO();
+    UZ byte_offset = stream->byte_offset;
+    UZ data_count = stream->count;
+    const U8 *data = stream->data;
+    // Reset the stream.
+    HeliosString8StreamInit(stream, data, data_count);
+
+    U32 col = 0;
+    U32 line = 1;
+
+    HeliosChar cur_char;
+    while (stream->byte_offset != byte_offset) {
+        HELIOS_ASSERT(HeliosString8StreamNext(stream, &cur_char));
+
+        if (cur_char == '\n' || (cur_char == '\r' &&
+                                 HeliosString8StreamNext(stream, &cur_char) &&
+                                 cur_char == '\n')) {
+            col = 0;
+            ++line;
+        } else {
+            ++col;
+        }
+    }
+
+    return (GeSourceLocation) {
+        .column = col,
+        .line = line,
+    };
 }
 
 HELIOS_INTERNAL GeSourceLocation _GeSourceLocationFromTokenData(HeliosString8Stream *stream, HeliosStringView data) {
-    HELIOS_UNUSED(stream);
-    HELIOS_UNUSED(data);
-    HELIOS_TODO();
+    UZ stream_data_count = stream->count;
+    const U8 *stream_data = stream->data;
+    // Reset the stream.
+    HeliosString8StreamInit(stream, stream_data, stream_data_count);
+
+    U32 col = 0;
+    U32 line = 1;
+
+    HeliosChar cur_char;
+    do {
+        HELIOS_ASSERT(HeliosString8StreamNext(stream, &cur_char));
+
+        if (cur_char == '\n' || (cur_char == '\r' &&
+                                 HeliosString8StreamNext(stream, &cur_char) &&
+                                 cur_char == '\n')) {
+            col = 0;
+            ++line;
+        } else {
+            ++col;
+        }
+    } while (stream->data + stream->byte_offset != data.data);
+
+    return (GeSourceLocation) {
+        .column = col,
+        .line = line,
+    };
 }
 
 #ifdef ASTRON_GE_USE_TOML
@@ -281,12 +328,14 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
 
 #define GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, token) do {             \
         if (!_GeTomlNextToken(&(ctx).stream, &(token))) {       \
+            HeliosString8StreamRetreat(&(ctx).stream);          \
             GE_TOML_BAIL_ON_STREAM((ctx), "unexpected EOF");    \
         }                                                       \
     } while (0)
 
 #define GE_TOML_PEEK_TOKEN_OR_BAIL(ctx, token) do {             \
-        if (!_GeTomlPeekToken(&(ctx).stream, &(token))) {        \
+        if (!_GeTomlPeekToken(&(ctx).stream, &(token))) {       \
+            HeliosString8StreamRetreat(&(ctx).stream);          \
             GE_TOML_BAIL_ON_STREAM((ctx), "unexpected EOF");    \
         }                                                       \
     } while (0)
@@ -589,7 +638,7 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(GeTomlParsingContext *ctx, GeTomlValue *ou
         };
         return 1;
     }
-    default: HELIOS_TODO();
+    default: GE_TOML_BAIL_ON_TOKEN(*ctx, cur_token, "expected an expression");
     }
 }
 
