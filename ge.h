@@ -176,7 +176,9 @@ typedef enum {
     GeTomlTokenType_Comma,
     GeTomlTokenType_Dot,
     GeTomlTokenType_Newline,
+
     GeTomlTokenType_Illegal,
+    GeTomlTokenType_UnterminatedString,
 } GeTomlTokenType;
 
 typedef struct GeTomlToken {
@@ -247,7 +249,11 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
         }
         UZ end = s->byte_offset;
 
-        HELIOS_ASSERT(s->byte_offset < s->count);
+        if (s->byte_offset >= s->count) {
+            token->type = GeTomlTokenType_UnterminatedString;
+            token->value = (HeliosStringView) { .data = s->data + start, .count = end - start };
+            return 1;
+        }
 
         token->type = GeTomlTokenType_String;
         token->value = (HeliosStringView) { .data = s->data + start, .count = end - start };
