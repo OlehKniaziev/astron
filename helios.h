@@ -384,36 +384,37 @@ void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ cou
     stream->last_char_size = -1;
 }
 
-#define HELIOS_UTF8_MASK2 ((HeliosChar)0xC0 << 24)
-#define HELIOS_UTF8_MASK3 ((HeliosChar)0xE0 << 24)
-#define HELIOS_UTF8_MASK4 ((HeliosChar)0xF0 << 24)
+#define HELIOS_UTF8_MASK2 ((HeliosChar)0xC0)
+#define HELIOS_UTF8_MASK3 ((HeliosChar)0xE0)
+#define HELIOS_UTF8_MASK4 ((HeliosChar)0xF0)
 
 // TODO: add more validations
-// FIXME: make this handle little-endian order correctly
 B32 HeliosString8StreamNext(HeliosString8Stream *stream, HeliosChar *c) {
     ++stream->byte_offset;
     if (stream->byte_offset >= stream->count) return 0;
 
     ++stream->char_offset;
 
-    U32 bytes = *(const U32 *)(stream->data + stream->byte_offset);
+    const U8 *ptr = stream->data + stream->byte_offset;
+
+    U32 bytes = ((U32)ptr[0] << 0) | ((U32)ptr[1] << 8) | ((U32)ptr[2] << 16) | ((U32)ptr[3] << 24);
 
     if ((bytes & HELIOS_UTF8_MASK2) == HELIOS_UTF8_MASK2) {
-        if (c != NULL) *c = ((bytes & (0x0F << 24)) >> 18) | ((bytes & (0x3F << 16)) >> 16);
+        if (c != NULL) *c = ((bytes & 0x1F) << 6) | ((bytes & 0x3F00) >> 8);
         stream->byte_offset += 1;
         stream->last_char_size = 2;
         return 1;
     }
 
     if ((bytes & HELIOS_UTF8_MASK3) == HELIOS_UTF8_MASK3) {
-        if (c != NULL) *c = ((bytes & (0x0F << 24)) >> 12) | ((bytes & (0x3F << 16)) >> 10) | ((bytes & (0x3F << 8)) >> 8);
+        if (c != NULL) *c = ((bytes & 0x0F) << 12) | ((bytes & 0x3F00) >> 2) | ((bytes & 0x3F0000) >> 16);
         stream->byte_offset += 2;
         stream->last_char_size = 3;
         return 1;
     }
 
     if ((bytes & HELIOS_UTF8_MASK4) == HELIOS_UTF8_MASK4) {
-        if (c != NULL) *c = ((bytes & (0x07 << 24)) >> 6) | ((bytes & (0x3F << 16)) >> 4) | ((bytes & (0x3F << 8)) >> 2) | (bytes & 0x3F);
+        if (c != NULL) *c = ((bytes & 0x07) << 18) | ((bytes & 0x3F00) << 4) | ((bytes & 0x3F0000) >> 10) | ((bytes & 0x3F000000) >> 24);
         stream->byte_offset += 3;
         stream->last_char_size = 4;
         return 1;
