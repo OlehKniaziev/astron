@@ -726,15 +726,13 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
         }
         case GeTomlTokenType_Newline: break;
         default: {
-            if (cur_token.type != GeTomlTokenType_Identifier) OK_GE_BAIL_ON_TOKEN(ctx, cur_token, "expected an identifier");
+            if (cur_token.type != GeTomlTokenType_Identifier) GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected an identifier");
 
-            HeliosString8 key = HeliosString8FromSV(ctx.allocator, cur_token.value);
+            HeliosStringView key = cur_token.value;
 
             GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, cur_token);
 
-            if (cur_token.type != GeTomlTokenType_Equals) {
-                GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected '='");
-            }
+            if (cur_token.type != GeTomlTokenType_Equals) GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected '='");
 
             GeTomlValue value;
             if (!_GeTomlParseValue(&ctx, &value)) return NULL;
@@ -743,9 +741,7 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
                 GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected a newline");
             }
 
-            HeliosStringView key_view = HeliosString8View(key);
-
-            _GeTomlTableInsert(ctx.allocator, current_table, key_view, value);
+            _GeTomlTableInsert(ctx.allocator, current_table, key, value);
             break;
         }
         }
