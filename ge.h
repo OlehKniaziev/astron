@@ -1,3 +1,9 @@
+// TODOs:
+// toml:
+//   create a basic context structure to not pass 10 arguments to each procedure
+//   add spec conformance tests
+//   implement error location procedures
+
 #ifndef ASTRON_GE_H
 #define ASTRON_GE_H
 
@@ -65,11 +71,12 @@ struct GeTomlTable {
 };
 
 GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
-                      const char *buf,
-                      UZ buf_count,
-                      char *err_buf,
-                      UZ err_buf_count);
+                               const char *buf,
+                               UZ buf_count,
+                               char *err_buf,
+                               UZ err_buf_count);
 
+GeTomlValue *GeTomlTableFind(GeTomlTable *table, HeliosStringView key);
 #endif // ASTRON_GE_USE_TOML
 
 #ifdef ASTRON_GE_IMPLEMENTATION
@@ -86,6 +93,15 @@ HELIOS_INTERNAL GeSourceLocation _GeSourceLocationFromTokenData(HeliosString8Str
 }
 
 #ifdef ASTRON_GE_USE_TOML
+
+GeTomlValue *GeTomlTableFind(GeTomlTable *table, HeliosStringView key) {
+    HELIOS_VERIFY(table != NULL);
+    for (; table != NULL; table = table->next) {
+        if (HeliosStringViewEqual(table->key, key)) return &table->value;
+    }
+
+    return NULL;
+}
 
 typedef enum {
     GeTomlTokenType_LeftBracket,
@@ -383,7 +399,13 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsert(HeliosAllocator allocator, GeTom
     return &table->next->value;
 }
 
-HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(HeliosAllocator allocator, GeTomlTable *table, GeTomlKey key, GeTomlValue value) {
+HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(HeliosAllocator allocator,
+                                                   GeTomlTable *table,
+                                                   GeTomlKey key,
+                                                   GeTomlValue value,
+                                                   HeliosString8Stream *input_stream,
+                                                   char *err_buf,
+                                                   UZ err_buf_count) {
     HELIOS_ASSERT(key.count > 0);
 
     HeliosStringView leaf_key = key.items[key.count - 1];
@@ -392,14 +414,44 @@ HELIOS_INTERNAL GeTomlValue *_GeTomlTableInsertKey(HeliosAllocator allocator, Ge
 
     for (UZ i = 0; i < key.count - 1; ++i) {
         HeliosStringView subtable_name = key.items[i];
-        GeTomlTable *subtable = (GeTomlTable *)HeliosAlloc(allocator, sizeof(GeTomlTable));
+        GeTomlTable *subtable;
 
-        GeTomlValue subtable_value = {
-            .type = GeTomlValueType_Table,
-            .t = subtable,
-        };
-        _GeTomlTableInsert(allocator, cur_table, subtable_name, subtable_value);
+        GeTomlValue *existing_subtable_value = GeTomlTableFind(cur_table, subtable_name);
+        if (existing_subtable_value) {
+            if (existing_subtable_value->type != GeTomlValueType_Table) {
+                GeSourceLocation err_location = _GeSourceLocationFromStream(input_stream);
+                snprintf(err_buf,
+                         err_buf_count,
+                         "%d:%d: expected key '" HELIOS_SV_FMT "' to refer to a table",
+                         err_location.line,
+                         err_location.column,
+                         HELIOS_SV_ARG(subtable_name));
+                return NULL;
+            }
+
+            subtable = existing_subtable_value->t;
+        } else {
+            subtable = (GeTomlTable *)HeliosAlloc(allocator, sizeof(GeTomlTable));
+            GeTomlValue subtable_value = {
+                .type = GeTomlValueType_Table,
+                .t = subtable,
+            };
+            _GeTomlTableInsert(allocator, cur_table, subtable_name, subtable_value);
+        }
+
         cur_table = subtable;
+    }
+
+    GeTomlValue *existing_value_for_key = GeTomlTableFind(cur_table, leaf_key);
+    if (existing_value_for_key != NULL) {
+        GeSourceLocation err_location = _GeSourceLocationFromStream(input_stream);
+        snprintf(err_buf,
+                 err_buf_count,
+                 "%d:%d: cannot redefine key '" HELIOS_SV_FMT "'",
+                 err_location.line,
+                 err_location.column,
+                 HELIOS_SV_ARG(leaf_key));
+        return NULL;
     }
 
     return _GeTomlTableInsert(allocator, cur_table, leaf_key, value);
@@ -515,7 +567,13 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(HeliosAllocator allocator, HeliosString8St
             GeTomlValue value;
             if (!_GeTomlParseKeyValue(allocator, stream, &key, &value, err_buf, err_buf_count)) return 0;
 
-            _GeTomlTableInsertKey(allocator, table, key, value);
+            if (_GeTomlTableInsertKey(allocator,
+                                      table,
+                                      key,
+                                      value,
+                                      stream,
+                                      err_buf,
+                                      err_buf_count) == NULL) return 0;
 
             if (!_GeTomlPeekToken(stream, &cur_token)) {
                 GeSourceLocation err_location = _GeSourceLocationFromStream(stream);
@@ -620,7 +678,14 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
                 .t = child_table,
             };
 
-            GeTomlValue *child_table_value_in_table = _GeTomlTableInsertKey(allocator, root_table, child_table_key, child_table_value);
+            GeTomlValue *child_table_value_in_table = _GeTomlTableInsertKey(allocator,
+                                                                            root_table,
+                                                                            child_table_key,
+                                                                            child_table_value,
+                                                                            &input_stream,
+                                                                            err_buf,
+                                                                            err_buf_count);
+            if (child_table_value_in_table == NULL) return NULL;
             HELIOS_ASSERT(child_table_value_in_table->type == GeTomlValueType_Table);
             current_table = child_table_value_in_table->t;
             break;

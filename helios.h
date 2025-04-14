@@ -150,6 +150,19 @@ typedef struct HeliosStringView {
     UZ count;
 } HeliosStringView;
 
+#define HELIOS_SV_FMT "%.*s"
+#define HELIOS_SV_ARG(sv) (int)(sv).count, (const char*)((sv).data)
+
+HELIOS_INLINE B32 HeliosStringViewEqual(HeliosStringView lhs, HeliosStringView rhs) {
+    if (lhs.count != rhs.count) return 0;
+
+    for (UZ i = 0; i < lhs.count; ++i) {
+        if (lhs.data[i] != rhs.data[i]) return 0;
+    }
+
+    return 1;
+}
+
 HELIOS_INLINE B32 HeliosStringViewEqualCStr(HeliosStringView sv, const char *cstr) {
     UZ cstr_len = strlen(cstr);
     if (cstr_len != sv.count) return 0;
