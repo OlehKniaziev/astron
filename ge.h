@@ -658,6 +658,7 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
             current_table = child_table_value_in_table->t;
             break;
         }
+        case GeTomlTokenType_Newline: break;
         default: {
             HELIOS_VERIFY(cur_token.type == GeTomlTokenType_Identifier);
             HeliosString8 key = HeliosString8FromSV(ctx.allocator, cur_token.value);
