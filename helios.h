@@ -158,6 +158,22 @@ typedef struct HeliosStringView {
 #define HELIOS_SV_FMT "%.*s"
 #define HELIOS_SV_ARG(sv) (int)(sv).count, (const char*)((sv).data)
 
+HELIOS_INLINE B32 HeliosStringViewStartsWithSV(HeliosStringView sv, HeliosStringView prefix) {
+    if (prefix.count > sv.count) return 0;
+
+    for (UZ i = 0; i < prefix.count; ++i) {
+        if (sv.data[i] != prefix.data[i]) return 0;
+    }
+
+    return 1;
+}
+
+HELIOS_INLINE B32 HeliosStringViewStartsWith(HeliosStringView sv, const char *prefix) {
+    UZ prefix_count = strlen(prefix);
+    HeliosStringView prefix_sv = { .data = (const U8 *)prefix, .count = prefix_count };
+    return HeliosStringViewStartsWithSV(sv, prefix_sv);
+}
+
 HELIOS_INLINE B32 HeliosStringViewEqual(HeliosStringView lhs, HeliosStringView rhs) {
     if (lhs.count != rhs.count) return 0;
 
@@ -199,7 +215,7 @@ HELIOS_INLINE HeliosString8 HeliosString8FromSV(HeliosAllocator allocator, Helio
     };
 }
 
-B32 HeliosParseS64(HeliosStringView, S64 *);
+B32 HeliosParseS64(HeliosStringView sv, U8 base, S64 *out);
 B32 HeliosParseF64(HeliosStringView, F64 *);
 
 typedef U32 HeliosChar;
@@ -249,7 +265,33 @@ HELIOS_INLINE HeliosString8 HeliosString8FromStringView(HeliosAllocator allocato
 
 #ifdef ASTRON_HELIOS_IMPLEMENTATION
 
-B32 HeliosParseS64(HeliosStringView source, S64 *out) {
+B32 _HeliosParseS64Hex(HeliosStringView source, S64 *out) {
+    if (source.count == 0) return 0;
+
+    S64 result = 0;
+    UZ coef = 1;
+
+    for (SZ i = source.count - 1; i >= 0; --i) {
+        U8 c = source.data[i];
+
+        U8 digit;
+        if (isdigit(c))                digit = c - '0';
+        else if (c >= 'A' && c <= 'F') digit = c - 55;
+        else if (c >= 'a' && c <= 'f') digit = c - 87;
+        else return 0;
+
+        result += digit * coef;
+        coef *= 16;
+    }
+
+    *out = result;
+
+    return 1;
+}
+
+B32 _HeliosParseS64Generic(HeliosStringView source, U8 base, S64 *out) {
+    HELIOS_ASSERT(base != 16);
+
     if (source.count == 0) return 0;
 
     S64 result = 0;
@@ -260,17 +302,31 @@ B32 HeliosParseS64(HeliosStringView source, S64 *out) {
         if (!isdigit(c)) return 0;
 
         U8 digit = c - '0';
+        if (digit >= base) return 0;
+
         result += digit * coef;
-        coef *= 10;
+        coef *= base;
     }
 
-    if (isdigit(source.data[0])) result += (source.data[0] - '0') * coef;
-    else if (source.data[0] == '-') result = -result;
-    else return 0;
+    if (isdigit(source.data[0])) {
+        U8 digit = source.data[0] - '0';
+        if (digit >= base) return 0;
+        result += digit * coef;
+    } else {
+        if (base != 10) return 0;
+
+        if (source.data[0] == '-') result = -result;
+        else if (source.data[0] != '+') return 0;
+    }
 
     *out = result;
 
     return 1;
+}
+
+B32 HeliosParseS64(HeliosStringView sv, U8 base, S64 *out) {
+    if (base == 16) return _HeliosParseS64Hex(sv, out);
+    return _HeliosParseS64Generic(sv, base, out);
 }
 
 // FIXME: This should NOT allocate anything, even on the temp allocator.

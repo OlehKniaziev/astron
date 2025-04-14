@@ -92,10 +92,42 @@ void Nested(void) {
     HELIOS_VERIFY(subsubtable->value.i == 1);
 }
 
+void Integers(void) {
+    HeliosAllocator allocator = HeliosNewMallocAllocator();
+    const char *buf = "two = 0b11\neight = 0o777\nten = 2005\nsixteen = 0xaBcD\n";
+    UZ buf_count = strlen(buf);
+    char err_buf[512];
+    UZ err_buf_count = sizeof(err_buf);
+    GeTomlTable *table = GeTomlParseBuffer(allocator,
+                                           buf,
+                                           buf_count,
+                                           err_buf,
+                                           err_buf_count);
+
+    HELIOS_VERIFY(table != NULL);
+
+    HELIOS_VERIFY(HeliosStringViewEqualCStr(table->key, "two"));
+    HELIOS_VERIFY(table->value.type == GeTomlValueType_Int);
+    HELIOS_VERIFY(table->value.i == 3);
+
+    HELIOS_VERIFY(HeliosStringViewEqualCStr(table->next->key, "eight"));
+    HELIOS_VERIFY(table->next->value.type == GeTomlValueType_Int);
+    HELIOS_VERIFY(table->next->value.i == 0777);
+
+    HELIOS_VERIFY(HeliosStringViewEqualCStr(table->next->next->key, "ten"));
+    HELIOS_VERIFY(table->next->next->value.type == GeTomlValueType_Int);
+    HELIOS_VERIFY(table->next->next->value.i == 2005);
+
+    HELIOS_VERIFY(HeliosStringViewEqualCStr(table->next->next->next->key, "sixteen"));
+    HELIOS_VERIFY(table->next->next->next->value.type == GeTomlValueType_Int);
+    HELIOS_VERIFY(table->next->next->next->value.i == 0xABCD);
+}
+
 int main(void) {
     EofError();
     TokenMismatchError();
     Basic();
     Nested();
+    Integers();
     return 0;
 }

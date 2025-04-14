@@ -20,6 +20,14 @@ typedef struct GeSourceLocation {
     U32 column;
 } GeSourceLocation;
 
+HELIOS_INLINE B32 GeIsCharDigitInBase(HeliosChar c, U8 base) {
+    if (base == 10) return c >= '0' && c <= '9';
+    if (base == 16) return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    if (base == 8)  return c >= '0' && c <= '7';
+    if (base == 2)  return c == '0' || c == '1';
+    return 0;
+}
+
 #ifdef ASTRON_GE_USE_TOML
 
 typedef U8 GeTomlValueType;
@@ -287,9 +295,20 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
         UZ start = s->byte_offset;
 
         if (HeliosCharIsDigit(cur_char)) {
-            while (HeliosString8StreamNext(s, &cur_char)) {
-                if (!HeliosCharIsDigit(cur_char)) break;
+            U8 base = 10;
+
+            if (HeliosString8StreamNext(s, &cur_char) && !HeliosCharIsDigit(cur_char)) {
+                if (cur_char == 'b')      base = 2;
+                else if (cur_char == 'o') base = 8;
+                else if (cur_char == 'x') base = 16;
+                else goto make_token;
             }
+
+            while (HeliosString8StreamNext(s, &cur_char)) {
+                if (!GeIsCharDigitInBase(cur_char, base)) break;
+            }
+
+        make_token:
 
             UZ end = s->byte_offset;
 
@@ -549,8 +568,24 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(GeTomlParsingContext *ctx, GeTomlValue *ou
         return 1;
     }
     case GeTomlTokenType_Int: {
+        HeliosStringView int_value = cur_token.value;
+        U8 base = 10;
+        if (HeliosStringViewStartsWith(cur_token.value, "0x")) {
+            int_value.data += 2;
+            int_value.count -= 2;
+            base = 16;
+        } else if (HeliosStringViewStartsWith(cur_token.value, "0o")) {
+            int_value.data += 2;
+            int_value.count -= 2;
+            base = 8;
+        } else if (HeliosStringViewStartsWith(cur_token.value, "0b")) {
+            int_value.data += 2;
+            int_value.count -= 2;
+            base = 2;
+        }
+
         S64 i;
-        HELIOS_ASSERT(HeliosParseS64(cur_token.value, &i));
+        HELIOS_ASSERT(HeliosParseS64(int_value, base, &i));
 
         *out = (GeTomlValue) {
             .type = GeTomlValueType_Int,
