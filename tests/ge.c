@@ -58,9 +58,44 @@ void Basic(void) {
     HELIOS_VERIFY(table != NULL);
 }
 
+void Nested(void) {
+    HeliosAllocator allocator = HeliosNewMallocAllocator();
+    const char *buf = "value = [{a.b = 1}]";
+    UZ buf_count = strlen(buf);
+    char err_buf[512];
+    UZ err_buf_count = sizeof(err_buf);
+    GeTomlTable *table = GeTomlParseBuffer(allocator,
+                                           buf,
+                                           buf_count,
+                                           err_buf,
+                                           err_buf_count);
+
+    HELIOS_VERIFY(table != NULL);
+
+    GeTomlValue *value = GeTomlTableFind(table, "value");
+    HELIOS_VERIFY(value != NULL);
+    HELIOS_VERIFY(value->type == GeTomlValueType_Array);
+
+    GeTomlArray array = value->a;
+    HELIOS_VERIFY(array.count = 1);
+
+    GeTomlValue subvalue = GeTomlArrayAt(&array, 0);
+    HELIOS_VERIFY(subvalue.type == GeTomlValueType_Table);
+
+    GeTomlTable *subtable = subvalue.t;
+    HELIOS_VERIFY(HeliosStringViewEqualCStr(subtable->key, "a"));
+    HELIOS_VERIFY(subtable->value.type == GeTomlValueType_Table);
+
+    GeTomlTable *subsubtable = subtable->value.t;
+    HELIOS_VERIFY(HeliosStringViewEqualCStr(subsubtable->key, "b"));
+    HELIOS_VERIFY(subsubtable->value.type == GeTomlValueType_Int);
+    HELIOS_VERIFY(subsubtable->value.i == 1);
+}
+
 int main(void) {
     EofError();
     TokenMismatchError();
     Basic();
+    Nested();
     return 0;
 }
