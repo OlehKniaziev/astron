@@ -266,11 +266,6 @@ HELIOS_INTERNAL HELIOS_INLINE void _GeTomlAdvanceTokens(HeliosString8Stream *s) 
 }
 
 #ifdef ASTRON_ERMIS_H
-#else
-
-#endif // ASTRON_ERMIS_H
-
-#ifdef ASTRON_ERMIS_H
     ERMIS_IMPL_ARRAY(GeTomlValue, GeTomlArray)
 
     ERMIS_DECL_ARRAY(HeliosStringView, GeTomlKey)
@@ -342,7 +337,7 @@ HELIOS_INTERNAL void GeTomlKeyPush(GeTomlKey *key, HeliosStringView part) {
 
     key->items[key->count++] = part;
 }
-#endif // ASTRON_HELIOS_H
+#endif // ASTRON_ERMIS_H
 
 // TODO: support quoted keys
 HELIOS_INTERNAL B32 _GeTomlParseKey(HeliosAllocator allocator,
