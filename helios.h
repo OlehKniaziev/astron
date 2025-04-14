@@ -40,6 +40,11 @@
         abort();                                                \
     } while (0)
 
+#define HELIOS_UNREACHABLE() do {                                      \
+        fprintf(stderr, "%s:%d: ENCOUNTERED UNREACHABLE CODE\n", __FILE__, __LINE__);     \
+        abort();                                                \
+    } while (0)
+
 #ifdef _MSC_VER
 #    define HELIOS_INLINE __forceinline
 #else
