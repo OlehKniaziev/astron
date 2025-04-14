@@ -279,6 +279,10 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
         token->value = (HeliosStringView) { .data = s->data + s->byte_offset - 1, .count = 2 };
         return 1;
     }
+    case '#': {
+        while (HeliosString8StreamNext(s, &cur_char) && cur_char != '\n');
+        return _GeTomlNextToken(s, token);
+    }
     default: {
         UZ start = s->byte_offset;
 
