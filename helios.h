@@ -158,6 +158,12 @@ typedef struct HeliosStringView {
 #define HELIOS_SV_FMT "%.*s"
 #define HELIOS_SV_ARG(sv) (int)(sv).count, (const char*)((sv).data)
 
+HELIOS_INLINE HeliosStringView HeliosStringViewClone(HeliosAllocator allocator, HeliosStringView sv) {
+    U8 *data = (U8 *)HeliosAlloc(allocator, sv.count);
+    memcpy(data, sv.data, sv.count);
+    return (HeliosStringView) { .data = data, .count = sv.count };
+}
+
 HELIOS_INLINE B32 HeliosStringViewStartsWithSV(HeliosStringView sv, HeliosStringView prefix) {
     if (prefix.count > sv.count) return 0;
 

@@ -64,7 +64,7 @@ struct GeTomlValue {
         S64 i;
         F64 f;
         B32 b;
-        HeliosString8 s;
+        HeliosStringView s;
         GeTomlArray a;
         GeTomlTable *t;
     };
@@ -560,7 +560,8 @@ HELIOS_INTERNAL B32 _GeTomlParseValue(GeTomlParsingContext *ctx, GeTomlValue *ou
 
     switch (cur_token.type) {
     case GeTomlTokenType_String: {
-        HeliosString8 s = HeliosString8FromStringView(ctx->allocator, cur_token.value);
+        HeliosStringView s = HeliosStringViewClone(ctx->allocator, cur_token.value);
+
         *out = (GeTomlValue) {
             .type = GeTomlValueType_String,
             .s = s,
@@ -763,7 +764,7 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
         default: {
             if (cur_token.type != GeTomlTokenType_Identifier) GE_TOML_BAIL_ON_TOKEN(ctx, cur_token, "expected an identifier");
 
-            HeliosStringView key = cur_token.value;
+            HeliosStringView key = HeliosStringViewClone(allocator, cur_token.value);
 
             GE_TOML_NEXT_TOKEN_OR_BAIL(ctx, cur_token);
 
