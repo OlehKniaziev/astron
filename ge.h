@@ -84,6 +84,9 @@ GeTomlTable *GeTomlParseBuffer(HeliosAllocator allocator,
 
 GeTomlValue *GeTomlTableFind(GeTomlTable *table, const char *key);
 GeTomlValue *GeTomlTableFindSV(GeTomlTable *table, HeliosStringView sv);
+
+B32 GeTomlTableHas(GeTomlTable *table, const char *key);
+B32 GeTomlTableHasSV(GeTomlTable *table, HeliosStringView sv);
 #endif // ASTRON_GE_USE_TOML
 
 #ifdef ASTRON_GE_IMPLEMENTATION
@@ -157,7 +160,6 @@ typedef struct GeTomlParsingContext {
 } GeTomlParsingContext;
 
 GeTomlValue *GeTomlTableFindSV(GeTomlTable *table, HeliosStringView key) {
-    HELIOS_VERIFY(table != NULL);
     for (; table != NULL; table = table->next) {
         if (HeliosStringViewEqual(table->key, key)) return &table->value;
     }
@@ -169,6 +171,20 @@ GeTomlValue *GeTomlTableFind(GeTomlTable *table, const char *key) {
     UZ sv_count = strlen(key);
     HeliosStringView sv = { .data = (const U8 *)key, .count = sv_count };
     return GeTomlTableFindSV(table, sv);
+}
+
+B32 GeTomlTableHasSV(GeTomlTable *table, HeliosStringView key) {
+    for (; table != NULL; table = table->next) {
+        if (HeliosStringViewEqual(table->key, key)) return 1;
+    }
+
+    return 0;
+}
+
+B32 GeTomlTableHas(GeTomlTable *table, const char *key) {
+    UZ sv_count = strlen(key);
+    HeliosStringView sv = { .data = (const U8 *)key, .count = sv_count };
+    return GeTomlTableHasSV(table, sv);
 }
 
 typedef enum {
