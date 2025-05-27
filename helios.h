@@ -9,6 +9,10 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
 #ifndef HELIOS_STRIP_ASSERTS
 #    define HELIOS_ASSERT(cond) do {                                        \
             if (!(cond)) {                                                  \
@@ -65,6 +69,12 @@
 #endif // _WIN32
 
 #define HELIOS_INTERNAL static
+
+#ifdef HELIOS_STATIC
+#define HELIOS_DEF HELIOS_INTERNAL
+#else
+#define HELIOS_DEF extern
+#endif // HELIOS_STATIC
 
 #if SIZE_MAX == UINT32_MAX
 #    define HELIOS_BITS_32
@@ -221,8 +231,9 @@ HELIOS_INLINE HeliosString8 HeliosString8FromSV(HeliosAllocator allocator, Helio
     };
 }
 
-B32 HeliosParseS64(HeliosStringView sv, U8 base, S64 *out);
-B32 HeliosParseF64(HeliosStringView, F64 *);
+HELIOS_DEF B32 HeliosParseS64(HeliosStringView sv, U8 base, S64 *out);
+HELIOS_DEF B32 HeliosParseS64DetectBase(HeliosStringView sv, S64 *out);
+HELIOS_DEF B32 HeliosParseF64(HeliosStringView, F64 *);
 
 typedef U32 HeliosChar;
 
@@ -238,8 +249,8 @@ HELIOS_INLINE B32 HeliosCharIsAlnum(HeliosChar c) {
     return HeliosCharIsDigit(c) || HeliosCharIsAlpha(c);
 }
 
-HeliosString8 HeliosString8FromCStr(HeliosAllocator, const char *);
-B32 HeliosString8FromCStrChecked(HeliosAllocator, const char *, HeliosString8 *);
+HELIOS_DEF HeliosString8 HeliosString8FromCStr(HeliosAllocator, const char *);
+HELIOS_DEF B32 HeliosString8FromCStrChecked(HeliosAllocator, const char *, HeliosString8 *);
 
 typedef struct HeliosString8Stream {
     const U8 *data;
@@ -249,10 +260,10 @@ typedef struct HeliosString8Stream {
     S8 last_char_size;
 } HeliosString8Stream;
 
-void HeliosString8StreamInit(HeliosString8Stream *, const U8 *, UZ);
-B32 HeliosString8StreamCur(HeliosString8Stream *, HeliosChar *);
-B32 HeliosString8StreamNext(HeliosString8Stream *, HeliosChar *);
-void HeliosString8StreamRetreat(HeliosString8Stream *);
+HELIOS_DEF void HeliosString8StreamInit(HeliosString8Stream *, const U8 *, UZ);
+HELIOS_DEF B32 HeliosString8StreamCur(HeliosString8Stream *, HeliosChar *);
+HELIOS_DEF B32 HeliosString8StreamNext(HeliosString8Stream *, HeliosChar *);
+HELIOS_DEF void HeliosString8StreamRetreat(HeliosString8Stream *);
 
 HELIOS_INLINE HeliosString8 HeliosString8FromStringView(HeliosAllocator allocator, HeliosStringView sv) {
     UZ s_count = sv.count;
@@ -269,9 +280,13 @@ HELIOS_INLINE HeliosString8 HeliosString8FromStringView(HeliosAllocator allocato
     };
 }
 
+#ifdef __cplusplus
+    }
+#endif // __cplusplus
+
 #ifdef ASTRON_HELIOS_IMPLEMENTATION
 
-B32 _HeliosParseS64Hex(HeliosStringView source, S64 *out) {
+HELIOS_DEF B32 _HeliosParseS64Hex(HeliosStringView source, S64 *out) {
     if (source.count == 0) return 0;
 
     S64 result = 0;
@@ -295,7 +310,7 @@ B32 _HeliosParseS64Hex(HeliosStringView source, S64 *out) {
     return 1;
 }
 
-B32 _HeliosParseS64Generic(HeliosStringView source, U8 base, S64 *out) {
+HELIOS_DEF B32 _HeliosParseS64Generic(HeliosStringView source, U8 base, S64 *out) {
     HELIOS_ASSERT(base != 16);
 
     if (source.count == 0) return 0;
@@ -330,14 +345,38 @@ B32 _HeliosParseS64Generic(HeliosStringView source, U8 base, S64 *out) {
     return 1;
 }
 
-B32 HeliosParseS64(HeliosStringView sv, U8 base, S64 *out) {
+HELIOS_DEF B32 HeliosParseS64(HeliosStringView sv, U8 base, S64 *out) {
     if (base == 16) return _HeliosParseS64Hex(sv, out);
     return _HeliosParseS64Generic(sv, base, out);
 }
 
+HELIOS_DEF B32 HeliosParseS64DetectBase(HeliosStringView sv, S64 *out) {
+    if (HeliosStringViewStartsWith(sv, "0x")) {
+        sv.data += 2;
+        sv.count -= 2;
+        return _HeliosParseS64Hex(sv, out);
+    }
+
+    if (HeliosStringViewStartsWith(sv, "0o")) {
+        sv.data += 2;
+        sv.count -= 2;
+
+        return _HeliosParseS64Generic(sv, 8, out);
+    }
+
+    if (HeliosStringViewStartsWith(sv, "0b")) {
+        sv.data += 2;
+        sv.count -= 2;
+
+        return _HeliosParseS64Generic(sv, 2, out);
+    }
+
+    return _HeliosParseS64Generic(sv, 10, out);
+}
+
 // FIXME: This should NOT allocate anything, even on the temp allocator.
 // Skill issue.
-B32 HeliosParseF64(HeliosStringView source, F64 *out) {
+HELIOS_DEF B32 HeliosParseF64(HeliosStringView source, F64 *out) {
     UZ temp_count = source.count + 1;
     char *temp = (char *)HeliosAlloc(helios_temp_allocator, temp_count);
     memcpy(temp, (const void *)source.data, source.count);
@@ -348,7 +387,7 @@ B32 HeliosParseF64(HeliosStringView source, F64 *out) {
     return temp != d_out;
 }
 
-void *HeliosRawAlloc(UZ size) {
+HELIOS_DEF void *HeliosRawAlloc(UZ size) {
 #ifdef HELIOS_PLATFORM_WINDOWS
     return VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 #else // Assume posix.
@@ -379,7 +418,7 @@ HELIOS_INTERNAL void _HeliosNopFreeStub(void *user, void *ptr, UZ size) {
     HELIOS_UNUSED(size);
 }
 
-HeliosAllocator HeliosNewMallocAllocator(void) {
+HELIOS_DEF HeliosAllocator HeliosNewMallocAllocator(void) {
     return (HeliosAllocator) {
         .vtable = (HeliosAllocatorVTable) {
             .alloc = MallocStub,
@@ -411,7 +450,7 @@ HELIOS_INTERNAL void *_HeliosDynamicCircleBufferAllocatorAlloc(void *a_ptr, UZ s
     return memset(ptr, 0, size);
 }
 
-HeliosAllocator HeliosNewDynamicCircleBufferAllocator(HeliosDynamicCircleBufferAllocator *allocator, UZ capacity) {
+HELIOS_DEF HeliosAllocator HeliosNewDynamicCircleBufferAllocator(HeliosDynamicCircleBufferAllocator *allocator, UZ capacity) {
     capacity = HeliosRoundUp(capacity, HELIOS_PAGE_ALIGNMENT);
 
     allocator->buffer = NULL;
@@ -428,7 +467,7 @@ HeliosAllocator HeliosNewDynamicCircleBufferAllocator(HeliosDynamicCircleBufferA
     };
 }
 
-HeliosDynamicCircleBufferAllocator _helios_temp_impl = {
+HELIOS_INTERNAL HeliosDynamicCircleBufferAllocator _helios_temp_impl = {
     .buffer = NULL,
     .capacity = HELIOS_PAGE_SIZE * 20,
     .offset = 0,
@@ -443,7 +482,7 @@ HeliosAllocator helios_temp_allocator = {
     },
 };
 
-void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ count) {
+HELIOS_DEF void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ count) {
     stream->data = data;
     stream->byte_offset = (UZ)-1;
     stream->char_offset = (UZ)-1;
@@ -456,7 +495,7 @@ void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ cou
 #define HELIOS_UTF8_MASK4 ((HeliosChar)0xF0)
 
 // TODO: add more validations
-B32 HeliosString8StreamNext(HeliosString8Stream *stream, HeliosChar *c) {
+HELIOS_DEF B32 HeliosString8StreamNext(HeliosString8Stream *stream, HeliosChar *c) {
     ++stream->byte_offset;
     if (stream->byte_offset >= stream->count) return 0;
 
@@ -492,7 +531,7 @@ B32 HeliosString8StreamNext(HeliosString8Stream *stream, HeliosChar *c) {
     return 1;
 }
 
-void HeliosString8StreamRetreat(HeliosString8Stream *s) {
+HELIOS_DEF void HeliosString8StreamRetreat(HeliosString8Stream *s) {
     HELIOS_VERIFY(s->last_char_size != -1);
     s->byte_offset -= s->last_char_size;
     s->char_offset -= 1;
