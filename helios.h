@@ -8,6 +8,7 @@
 #include <malloc.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/mman.h>
 
 #ifdef __cplusplus
 extern "C" {
