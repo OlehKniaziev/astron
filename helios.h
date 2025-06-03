@@ -45,6 +45,11 @@ extern "C" {
         abort();                                                \
     } while (0)
 
+#define HELIOS_PANIC_FMT(fmt, ...) do {                                     \
+        fprintf(stderr, "%s:%d: PROGRAM PANICKED: " fmt "\n", __FILE__, __LINE__, __VA_ARGS__);     \
+        abort();                                                \
+    } while (0)
+
 #define HELIOS_UNREACHABLE() do {                                      \
         fprintf(stderr, "%s:%d: ENCOUNTERED UNREACHABLE CODE\n", __FILE__, __LINE__);     \
         abort();                                                \
