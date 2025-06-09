@@ -8,7 +8,6 @@
 #include <malloc.h>
 #include <string.h>
 #include <ctype.h>
-#include <sys/mman.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +71,8 @@ extern "C" {
 #else
 #    define HELIOS_PLATFORM_POSIX
 #    define HELIOS_PAGE_ALIGNMENT (1024 * 4)
+
+#include <sys/mman.h>
 #endif // _WIN32
 
 #define HELIOS_INTERNAL static
@@ -157,7 +158,7 @@ HELIOS_INLINE UZ HeliosRoundDown(UZ size, UZ align) {
     return size - (size & (align - 1));
 }
 
-extern HeliosAllocator helios_temp_allocator;
+HeliosAllocator HeliosGetTempAllocator(void);
 
 typedef struct HeliosString8 {
     U8 *data;
@@ -383,8 +384,10 @@ HELIOS_DEF B32 HeliosParseS64DetectBase(HeliosStringView sv, S64 *out) {
 // FIXME: This should NOT allocate anything, even on the temp allocator.
 // Skill issue.
 HELIOS_DEF B32 HeliosParseF64(HeliosStringView source, F64 *out) {
+    HeliosAllocator temp_alloc = HeliosGetTempAllocator();
+
     UZ temp_count = source.count + 1;
-    char *temp = (char *)HeliosAlloc(helios_temp_allocator, temp_count);
+    char *temp = (char *)HeliosAlloc(temp_alloc, temp_count);
     memcpy(temp, (const void *)source.data, source.count);
     temp[temp_count] = '\0';
 
@@ -479,6 +482,19 @@ HELIOS_INTERNAL HeliosDynamicCircleBufferAllocator _helios_temp_impl = {
     .offset = 0,
 };
 
+#ifdef _MSC_VER
+HeliosAllocator HeliosGetTempAllocator(void) {
+    return (HeliosAllocator) {
+        .data = (void *)&_helios_temp_impl,
+        .vtable = (HeliosAllocatorVTable) {
+            .alloc = _HeliosDynamicCircleBufferAllocatorAlloc,
+            .free = _HeliosNopFreeStub,
+            .realloc = NULL,
+        },
+    };
+}
+
+#else
 HeliosAllocator helios_temp_allocator = {
     .data = (void *)&_helios_temp_impl,
     .vtable = (HeliosAllocatorVTable) {
@@ -487,6 +503,11 @@ HeliosAllocator helios_temp_allocator = {
         .realloc = NULL,
     },
 };
+
+HeliosAllocator HeliosGetTempAllocator(void) {
+    return helios_temp_allocator;
+}
+#endif // _MSC_VER
 
 HELIOS_DEF void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ count) {
     stream->data = data;
