@@ -5,4 +5,5 @@ to have a single central header, with all other headers being able to only depen
 | Header                   | Description                                                                                    |
 |--------------------------|------------------------------------------------------------------------------------------------|
 | **[helios.h](helios.h)** | The central header, which provides the allocator interface and basic QOL procedures and types. |
-| **[ermis.h](ermis.h)**   | Provides template-like data structure generation macros                                        |
+| **[ermis.h](ermis.h)**   | Provides template-like data structure generation macros.                                       |
+| **[ge.h](ge.h)**         | Includes decoders and encoders for various configuration file formats (currently TOML only).   |
