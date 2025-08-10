@@ -193,6 +193,12 @@ HELIOS_INLINE HeliosStringView HeliosStringViewClone(HeliosAllocator allocator, 
     return (HeliosStringView) { .data = data, .count = sv.count };
 }
 
+HELIOS_INLINE char *HeliosStringViewCloneToCStr(HeliosAllocator allocator, HeliosStringView sv) {
+    char *data = (char *)HeliosAlloc(allocator, sv.count + 1);
+    memcpy(data, sv.data, sv.count);
+    return data;
+}
+
 HELIOS_INLINE B32 HeliosStringViewStartsWithSV(HeliosStringView sv, HeliosStringView prefix) {
     if (prefix.count > sv.count) return 0;
 
