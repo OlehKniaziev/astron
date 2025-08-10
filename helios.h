@@ -503,7 +503,7 @@ HELIOS_INTERNAL HeliosDynamicCircleBufferAllocator _helios_temp_impl = {
 };
 
 #if defined(HELIOS_COMPILER_MSVC) || defined(HELIOS_COMPILER_GCC)
-HeliosAllocator HeliosGetTempAllocator(void) {
+HELIOS_DEF HeliosAllocator HeliosGetTempAllocator(void) {
     return (HeliosAllocator) {
         .data = (void *)&_helios_temp_impl,
         .vtable = (HeliosAllocatorVTable) {
@@ -515,7 +515,7 @@ HeliosAllocator HeliosGetTempAllocator(void) {
 }
 
 #else
-HeliosAllocator helios_temp_allocator = {
+HELIOS_INTERNAL HeliosAllocator _helios_temp_allocator = {
     .data = (void *)&_helios_temp_impl,
     .vtable = (HeliosAllocatorVTable) {
         .alloc = _HeliosDynamicCircleBufferAllocatorAlloc,
@@ -524,10 +524,10 @@ HeliosAllocator helios_temp_allocator = {
     },
 };
 
-HeliosAllocator HeliosGetTempAllocator(void) {
-    return helios_temp_allocator;
+HELIOS_DEF HeliosAllocator HeliosGetTempAllocator(void) {
+    return _helios_temp_allocator;
 }
-#endif // _MSC_VER
+#endif
 
 HELIOS_DEF void HeliosString8StreamInit(HeliosString8Stream *stream, const U8 *data, UZ count) {
     stream->data = data;
