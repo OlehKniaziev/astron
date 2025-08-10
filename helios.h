@@ -305,6 +305,8 @@ HELIOS_INLINE HeliosString8 HeliosString8FromStringView(HeliosAllocator allocato
     };
 }
 
+HELIOS_DEF HeliosStringView HeliosReadEntireFile(HeliosAllocator, HeliosStringView);
+
 #ifdef __cplusplus
     }
 #endif // __cplusplus
@@ -581,6 +583,36 @@ HELIOS_DEF void HeliosString8StreamRetreat(HeliosString8Stream *s) {
     s->byte_offset -= s->last_char_size;
     s->char_offset -= 1;
     s->last_char_size = -1;
+}
+
+HELIOS_DEF HeliosStringView HeliosReadEntireFile(HeliosAllocator allocator, HeliosStringView path) {
+    char *path_cstr = HeliosStringViewCloneToCStr(allocator, path);
+
+    ssize_t fd = open(path_cstr, O_RDONLY);
+    if (fd == -1) {
+        return (HeliosStringView) {.data = NULL, .count = 0};
+    }
+
+    struct stat file_stat;
+    int ret = fstat(fd, &file_stat);
+    if (ret == -1) {
+        return (HeliosStringView) {.data = NULL, .count = 0};
+    }
+
+    size_t file_size = file_stat.st_size;
+    U8 *file_buf = HeliosAlloc(allocator, file_size);
+
+    size_t total_bytes_read = 0;
+    while (total_bytes_read != file_size) {
+        ssize_t n = read(fd, &file_buf[total_bytes_read], file_size - total_bytes_read);
+        if (n == -1) {
+            HeliosFree(allocator, file_buf, file_size);
+            return (HeliosStringView) {.data = NULL, .count = 0};
+        }
+        total_bytes_read += (size_t)n;
+    }
+
+    return (HeliosStringView) {.data = file_buf, .count = file_size};
 }
 
 #endif // HELIOS_IMPLEMENTATION
