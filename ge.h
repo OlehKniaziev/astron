@@ -332,7 +332,7 @@ HELIOS_INTERNAL B32 _GeTomlNextToken(HeliosString8Stream *s, GeTomlToken *token)
                 if (!GeIsCharDigitInBase(cur_char, base)) break;
             }
 
-        make_token:
+        make_token: ;
 
             UZ end = s->byte_offset;
 
