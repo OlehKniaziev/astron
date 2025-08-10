@@ -72,8 +72,19 @@ extern "C" {
 #    define HELIOS_PLATFORM_POSIX
 #    define HELIOS_PAGE_ALIGNMENT (1024 * 4)
 
-#include <sys/mman.h>
+#    include <fcntl.h>
+#    include <unistd.h>
+#    include <sys/stat.h>
+#    include <sys/mman.h>
 #endif // _WIN32
+
+#if defined(__clang__)
+#    define HELIOS_COMPILER_CLANG
+#elif defined(__GNUC__)
+#    define HELIOS_COMPILER_GCC
+#elif defined(_MSVC_VER)
+#    define HELIOS_COMPILER_MSVC
+#endif
 
 #define HELIOS_INTERNAL static
 
@@ -483,7 +494,7 @@ HELIOS_INTERNAL HeliosDynamicCircleBufferAllocator _helios_temp_impl = {
     .offset = 0,
 };
 
-#ifdef _MSC_VER
+#if defined(HELIOS_COMPILER_MSVC) || defined(HELIOS_COMPILER_GCC)
 HeliosAllocator HeliosGetTempAllocator(void) {
     return (HeliosAllocator) {
         .data = (void *)&_helios_temp_impl,
