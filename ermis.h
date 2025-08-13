@@ -74,7 +74,7 @@
                                                                         \
     HELIOS_INLINE B32 hashmapname##Find(hashmapname *map, K key, V *value) { \
         V *found_ptr = hashmapname##FindPtr(map, key);                  \
-        if (found_ptr != NULL) {                                        \
+        if (found_ptr == NULL) {                                        \
             return 0;                                                   \
         } else {                                                        \
             *value = *found_ptr;                                        \
