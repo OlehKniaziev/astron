@@ -97,7 +97,7 @@
 #define ERMIS_HASHMAP_FOREACH(hashmap, keyname, valuename, body)        \
     for (UZ _idx = 0; _idx < (hashmap)->capacity; ++_idx) {             \
         if (((hashmap)->meta[_idx] & ERMIS_HASH_OCCUPIED) == 0) continue; \
-        __typeof__((hashmap)->keys[0]) keyname = (hashmap)->keys[_idx];     \
+        __typeof__((hashmap)->keys[0]) keyname = (hashmap)->keys[_idx]; \
         __typeof__((hashmap)->values[0]) valuename = (hashmap)->values[_idx]; \
         body;                                                           \
     }
@@ -105,10 +105,10 @@
 #define ERMIS_IMPL_HASHMAP(K, V, hashmapname, eqfunc, hashfunc)         \
     void hashmapname##Init(hashmapname *map, HeliosAllocator allocator, UZ cap) { \
         map->allocator = allocator;                                     \
-        map->keys = HeliosAlloc(allocator, sizeof(K) * cap);            \
-        map->values = HeliosAlloc(allocator, sizeof(V) * cap);          \
-        map->meta = HeliosAlloc(allocator, sizeof(map->meta[0]) * cap); \
         map->capacity = cap ? cap : ERMIS_HASHMAP_DEFAULT_CAP;          \
+        map->keys = HeliosAlloc(allocator, sizeof(K) * map->capacity);            \
+        map->values = HeliosAlloc(allocator, sizeof(V) * map->capacity);          \
+        map->meta = HeliosAlloc(allocator, sizeof(map->meta[0]) * map->capacity); \
         map->count = 0;                                                 \
     }                                                                   \
                                                                         \
