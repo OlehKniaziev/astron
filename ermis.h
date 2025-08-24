@@ -145,7 +145,7 @@
             }                                                           \
                                                                         \
             ++idx;                                                      \
-            if (idx > map->capacity) idx = 0;                           \
+            if (idx >= map->capacity) idx = 0;                          \
         } while (1);                                                    \
     }                                                                   \
                                                                         \
@@ -160,7 +160,7 @@
                                                                         \
             ++idx;                                                      \
             /* NOTE: using an `if` instead of modulus */                \
-            if (idx > map->capacity) idx = 0;                           \
+            if (idx >= map->capacity) idx = 0;                          \
         } while (idx != start_idx);                                     \
                                                                         \
         return NULL;                                                    \
