@@ -119,9 +119,10 @@
             hashmapname new_map;                                        \
             hashmapname##Init(&new_map, map->allocator, new_cap);       \
                                                                         \
-            ERMIS_HASHMAP_FOREACH(map, k, v, {                          \
-                    hashmapname##Insert(&new_map, k, v);                \
+            ERMIS_HASHMAP_FOREACH(map, key, value, {                    \
+                    HELIOS_ASSERT(hashmapname##Insert(&new_map, key, value)); \
                 });                                                     \
+                                                                        \
             hashmapname##Free(map);                                     \
             *map = new_map;                                             \
         }                                                               \
