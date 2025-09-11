@@ -307,10 +307,6 @@ HELIOS_INLINE HeliosString8 HeliosString8FromStringView(HeliosAllocator allocato
 
 HELIOS_DEF HeliosStringView HeliosReadEntireFile(HeliosAllocator, HeliosStringView);
 
-#ifdef __cplusplus
-    }
-#endif // __cplusplus
-
 #ifdef ASTRON_HELIOS_IMPLEMENTATION
 
 HELIOS_DEF B32 _HeliosParseS64Hex(HeliosStringView source, S64 *out) {
@@ -620,4 +616,9 @@ HELIOS_DEF HeliosStringView HeliosReadEntireFile(HeliosAllocator allocator, Heli
 }
 
 #endif // HELIOS_IMPLEMENTATION
+
+#ifdef __cplusplus
+    }
+#endif // __cplusplus
+
 #endif // HELIOS_H
