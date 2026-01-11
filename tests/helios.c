@@ -19,7 +19,7 @@ void FormatAppendCorrect(void) {
     HELIOS_VERIFY(strcmp((char *)s.data, "hello 1 world yes") == 0);
 }
 
-int main() {
+int main(void) {
     ReadFileSuccess();
     FormatAppendCorrect();
 }
